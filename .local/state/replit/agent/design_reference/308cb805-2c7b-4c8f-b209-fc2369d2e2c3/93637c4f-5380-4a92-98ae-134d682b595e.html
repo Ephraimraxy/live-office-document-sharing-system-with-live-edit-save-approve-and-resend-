@@ -1,0 +1,744 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocFlow - Document Workflow Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#1976D2',
+                        secondary: '#424242',
+                        success: '#388E3C',
+                        warning: '#F57C00',
+                        error: '#D32F2F',
+                        gray: {
+                            50: '#FAFAFA',
+                            100: '#F5F5F5',
+                            200: '#EEEEEE',
+                            300: '#E0E0E0',
+                            400: '#BDBDBD',
+                            500: '#9E9E9E',
+                            600: '#757575',
+                            700: '#616161',
+                            800: '#424242',
+                            900: '#212121'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="font-inter bg-gray-50 text-gray-900">
+    <!-- @COMPONENT: AppLayout -->
+    <div class="flex h-screen overflow-hidden">
+        <!-- @COMPONENT: Sidebar -->
+        <aside class="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
+            <!-- Logo and branding -->
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-file-alt text-white text-sm"></i>
+                    </div>
+                    <span class="text-xl font-semibold text-gray-900">DocFlow</span>
+                </div>
+            </div>
+
+            <!-- User profile section -->
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                        <span class="text-white font-medium text-sm" data-bind="user.initials">JD</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-900 truncate" data-bind="user.name">John Doe</p>
+                        <p class="text-xs text-gray-500" data-bind="user.role">Admin</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation menu -->
+            <nav class="flex-1 px-4 py-6 space-y-2">
+                <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg bg-primary text-white" data-event="click:navigateToDocuments">
+                    <i class="fas fa-folder-open text-sm"></i>
+                    <span class="font-medium">Documents</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:navigateToTasks">
+                    <i class="fas fa-tasks text-sm"></i>
+                    <span class="font-medium">My Tasks</span>
+                    <span class="ml-auto bg-warning text-white text-xs px-2 py-1 rounded-full" data-bind="user.pendingTasksCount">3</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:navigateToWorkflows">
+                    <i class="fas fa-sitemap text-sm"></i>
+                    <span class="font-medium">Workflows</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:navigateToReports">
+                    <i class="fas fa-chart-bar text-sm"></i>
+                    <span class="font-medium">Reports</span>
+                </a>
+                
+                <!-- Admin-only section -->
+                <!-- @STATE: user.role === 'ADMIN' -->
+                <div class="pt-4 border-t border-gray-200 mt-4" data-mock="true">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Administration</p>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:navigateToUsers">
+                        <i class="fas fa-users text-sm"></i>
+                        <span class="font-medium">User Management</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:navigateToDepartments">
+                        <i class="fas fa-building text-sm"></i>
+                        <span class="font-medium">Departments</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:navigateToAudit">
+                        <i class="fas fa-history text-sm"></i>
+                        <span class="font-medium">Audit Logs</span>
+                    </a>
+                </div>
+            </nav>
+
+            <!-- Logout button -->
+            <div class="p-4 border-t border-gray-200">
+                <button class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors" data-event="click:logout">
+                    <i class="fas fa-sign-out-alt text-sm"></i>
+                    <span class="font-medium">Logout</span>
+                </button>
+            </div>
+        </aside>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- @COMPONENT: MainContent -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-semibold text-gray-900">Documents</h1>
+                        <p class="text-sm text-gray-600 mt-1">Manage and track document workflows</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <!-- Search bar -->
+                        <div class="relative">
+                            <input type="text" placeholder="Search documents..." class="w-80 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none" data-event="input:searchDocuments">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                        
+                        <!-- Create document button -->
+                        <button class="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2" data-event="click:createDocument">
+                            <i class="fas fa-plus"></i>
+                            <span>New Document</span>
+                        </button>
+                        
+                        <!-- Notifications -->
+                        <div class="relative">
+                            <button class="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors relative" data-event="click:toggleNotifications">
+                                <i class="fas fa-bell"></i>
+                                <span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full" data-bind="hasUnreadNotifications"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content area -->
+            <div class="flex-1 overflow-auto p-6">
+                <!-- Filter and sort controls -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-2">
+                                <label class="text-sm font-medium text-gray-700">Filter by status:</label>
+                                <select class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:border-transparent" data-event="change:filterByStatus">
+                                    <option value="">All</option>
+                                    <option value="DRAFT">Draft</option>
+                                    <option value="IN_REVIEW">In Review</option>
+                                    <option value="PENDING_SIGNATURE">Pending Signature</option>
+                                    <option value="APPROVED">Approved</option>
+                                    <option value="REJECTED">Rejected</option>
+                                    <option value="ARCHIVED">Archived</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <label class="text-sm font-medium text-gray-700">Department:</label>
+                                <select class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:border-transparent" data-event="change:filterByDepartment">
+                                    <option value="">All Departments</option>
+                                    <option value="finance">Finance</option>
+                                    <option value="hr">Human Resources</option>
+                                    <option value="legal">Legal</option>
+                                    <option value="operations">Operations</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors" data-event="click:toggleView" title="List view">
+                                <i class="fas fa-list"></i>
+                            </button>
+                            <button class="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors" data-event="click:toggleView" title="Grid view">
+                                <i class="fas fa-th-large"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents table -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                                        <button class="flex items-center space-x-1 hover:text-gray-900" data-event="click:sortBy:title">
+                                            <span>Document</span>
+                                            <i class="fas fa-sort text-xs"></i>
+                                        </button>
+                                    </th>
+                                    <th class="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
+                                    <th class="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wide">Department</th>
+                                    <th class="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wide">Owner</th>
+                                    <th class="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                                        <button class="flex items-center space-x-1 hover:text-gray-900" data-event="click:sortBy:updatedAt">
+                                            <span>Last Updated</span>
+                                            <i class="fas fa-sort text-xs"></i>
+                                        </button>
+                                    </th>
+                                    <th class="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wide">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <!-- @MAP: documents.map(document => ( -->
+                                <tr class="hover:bg-gray-50 transition-colors" data-mock="true">
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                <i class="fas fa-file-pdf text-primary text-sm"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-gray-900" data-bind="document.title">Q4 Financial Report</p>
+                                                <p class="text-sm text-gray-500">Version <span data-bind="document.currentVersion">2.1</span></p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800" data-bind="document.status">
+                                            <i class="fas fa-clock mr-1"></i>
+                                            In Review
+                                        </span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900" data-bind="document.department">Finance</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                <span class="text-xs font-medium text-gray-700" data-bind="document.owner.initials">JS</span>
+                                            </div>
+                                            <span class="text-sm text-gray-900" data-bind="document.owner.name">Jane Smith</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900" data-bind="document.updatedAt">2 hours ago</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <button class="text-primary hover:text-blue-700 text-sm font-medium" data-event="click:viewDocument" data-implementation="Navigate to document detail view">
+                                                View
+                                            </button>
+                                            <button class="text-gray-600 hover:text-gray-900 text-sm font-medium" data-event="click:downloadDocument">
+                                                Download
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <tr class="hover:bg-gray-50 transition-colors" data-mock="true">
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                                                <i class="fas fa-file-word text-success text-sm"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-gray-900">Employee Handbook Update</p>
+                                                <p class="text-sm text-gray-500">Version 1.0</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <i class="fas fa-check-circle mr-1"></i>
+                                            Approved
+                                        </span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900">Human Resources</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                <span class="text-xs font-medium text-gray-700">MJ</span>
+                                            </div>
+                                            <span class="text-sm text-gray-900">Mike Johnson</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900">1 day ago</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <button class="text-primary hover:text-blue-700 text-sm font-medium" data-event="click:viewDocument">
+                                                View
+                                            </button>
+                                            <button class="text-gray-600 hover:text-gray-900 text-sm font-medium" data-event="click:downloadDocument">
+                                                Download
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <tr class="hover:bg-gray-50 transition-colors" data-mock="true">
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                                                <i class="fas fa-file-contract text-error text-sm"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-gray-900">Vendor Agreement - TechCorp</p>
+                                                <p class="text-sm text-gray-500">Version 1.2</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            <i class="fas fa-times-circle mr-1"></i>
+                                            Rejected
+                                        </span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900">Legal</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                <span class="text-xs font-medium text-gray-700">AS</span>
+                                            </div>
+                                            <span class="text-sm text-gray-900">Anna Silva</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900">3 days ago</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <button class="text-primary hover:text-blue-700 text-sm font-medium" data-event="click:viewDocument">
+                                                View
+                                            </button>
+                                            <button class="text-gray-600 hover:text-gray-900 text-sm font-medium" data-event="click:downloadDocument">
+                                                Download
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <tr class="hover:bg-gray-50 transition-colors" data-mock="true">
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                <i class="fas fa-file-signature text-primary text-sm"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-gray-900">IT Security Policy</p>
+                                                <p class="text-sm text-gray-500">Version 3.0</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            <i class="fas fa-pen mr-1"></i>
+                                            Pending Signature
+                                        </span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900">Operations</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                <span class="text-xs font-medium text-gray-700">RB</span>
+                                            </div>
+                                            <span class="text-sm text-gray-900">Robert Brown</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <span class="text-sm text-gray-900">5 hours ago</span>
+                                    </td>
+                                    <td class="py-4 px-6">
+                                        <div class="flex items-center space-x-2">
+                                            <button class="text-primary hover:text-blue-700 text-sm font-medium" data-event="click:viewDocument">
+                                                View
+                                            </button>
+                                            <button class="text-gray-600 hover:text-gray-900 text-sm font-medium" data-event="click:downloadDocument">
+                                                Download
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <!-- @END_MAP )) -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+                        <div class="flex items-center text-sm text-gray-700">
+                            Showing <span class="font-medium">1</span> to <span class="font-medium">4</span> of <span class="font-medium">12</span> results
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled data-event="click:previousPage">
+                                Previous
+                            </button>
+                            <button class="px-3 py-1 bg-primary text-white rounded-md text-sm">1</button>
+                            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50" data-event="click:goToPage:2">2</button>
+                            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50" data-event="click:goToPage:3">3</button>
+                            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50" data-event="click:nextPage">
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <!-- @END_COMPONENT: MainContent -->
+
+        <!-- @COMPONENT: DocumentDetailPanel (Hidden by default, shown when document is selected) -->
+        <div class="hidden w-96 bg-white shadow-lg border-l border-gray-200 flex flex-col" id="documentDetailPanel" data-implementation="Show/hide based on document selection">
+            <!-- Document header -->
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h2 class="text-lg font-semibold text-gray-900 truncate" data-bind="selectedDocument.title">Q4 Financial Report</h2>
+                        <p class="text-sm text-gray-500 mt-1">Version <span data-bind="selectedDocument.currentVersion">2.1</span></p>
+                    </div>
+                    <button class="p-1 text-gray-400 hover:text-gray-600" data-event="click:closeDocumentDetail">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <!-- Status and workflow actions -->
+                <div class="mt-4">
+                    <div class="flex items-center space-x-2 mb-4">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800" data-bind="selectedDocument.status">
+                            <i class="fas fa-clock mr-1"></i>
+                            In Review
+                        </span>
+                        <span class="text-xs text-gray-500">Updated <span data-bind="selectedDocument.updatedAt">2 hours ago</span></span>
+                    </div>
+
+                    <!-- Workflow actions -->
+                    <div class="space-y-2" data-implementation="Show different actions based on user role and document status">
+                        <button class="w-full bg-success text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2" data-event="click:approveDocument">
+                            <i class="fas fa-check"></i>
+                            <span>Approve Document</span>
+                        </button>
+                        <button class="w-full bg-warning text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-600 transition-colors flex items-center justify-center space-x-2" data-event="click:requestChanges">
+                            <i class="fas fa-edit"></i>
+                            <span>Request Changes</span>
+                        </button>
+                        <button class="w-full bg-error text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center space-x-2" data-event="click:rejectDocument">
+                            <i class="fas fa-times"></i>
+                            <span>Reject Document</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Document details tabs -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <div class="border-b border-gray-200">
+                    <nav class="flex space-x-6 px-6">
+                        <button class="py-3 px-1 border-b-2 border-primary text-primary font-medium text-sm" data-event="click:switchTab:details">
+                            Details
+                        </button>
+                        <button class="py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm" data-event="click:switchTab:versions">
+                            Versions
+                        </button>
+                        <button class="py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm" data-event="click:switchTab:comments">
+                            Comments
+                            <span class="ml-1 bg-gray-200 text-gray-700 text-xs px-2 py-0.5 rounded-full" data-bind="document.commentsCount">3</span>
+                        </button>
+                        <button class="py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm" data-event="click:switchTab:audit">
+                            Audit
+                        </button>
+                    </nav>
+                </div>
+
+                <!-- Tab content -->
+                <div class="flex-1 overflow-auto p-6">
+                    <!-- Details tab -->
+                    <div id="detailsTab" data-implementation="Show/hide based on active tab">
+                        <div class="space-y-6">
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-900 mb-2">Document Information</h3>
+                                <dl class="space-y-2">
+                                    <div class="flex justify-between">
+                                        <dt class="text-sm text-gray-500">Owner</dt>
+                                        <dd class="text-sm text-gray-900" data-bind="selectedDocument.owner">Jane Smith</dd>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <dt class="text-sm text-gray-500">Department</dt>
+                                        <dd class="text-sm text-gray-900" data-bind="selectedDocument.department">Finance</dd>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <dt class="text-sm text-gray-500">Created</dt>
+                                        <dd class="text-sm text-gray-900" data-bind="selectedDocument.createdAt">Dec 15, 2023</dd>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <dt class="text-sm text-gray-500">Due Date</dt>
+                                        <dd class="text-sm text-gray-900" data-bind="selectedDocument.dueDate">Dec 20, 2023</dd>
+                                    </div>
+                                </dl>
+                            </div>
+
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-900 mb-2">Participants</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Reviewers</p>
+                                        <div class="mt-1 space-y-1" data-mock="true">
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-gray-700">MJ</span>
+                                                </div>
+                                                <span class="text-sm text-gray-900">Mike Johnson</span>
+                                                <span class="text-xs text-green-600 ml-auto">Reviewed</span>
+                                            </div>
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-gray-700">LW</span>
+                                                </div>
+                                                <span class="text-sm text-gray-900">Lisa Wilson</span>
+                                                <span class="text-xs text-orange-600 ml-auto">Pending</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Approvers</p>
+                                        <div class="mt-1 space-y-1" data-mock="true">
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-gray-700">JD</span>
+                                                </div>
+                                                <span class="text-sm text-gray-900">John Doe</span>
+                                                <span class="text-xs text-gray-500 ml-auto">Assigned</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comments tab (hidden by default) -->
+                    <div id="commentsTab" class="hidden" data-implementation="Show/hide based on active tab">
+                        <div class="space-y-4">
+                            <!-- Add comment form -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <textarea placeholder="Add a comment..." class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent" rows="3" data-event="input:updateCommentText"></textarea>
+                                <div class="flex justify-end mt-2">
+                                    <button class="bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors" data-event="click:addComment">
+                                        Add Comment
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Comments list -->
+                            <div class="space-y-4" data-mock="true">
+                                <!-- @MAP: comments.map(comment => ( -->
+                                <div class="bg-white border border-gray-200 rounded-lg p-4">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                                            <span class="text-xs font-medium text-gray-700" data-bind="comment.author.initials">MJ</span>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center space-x-2">
+                                                <p class="text-sm font-medium text-gray-900" data-bind="comment.author.name">Mike Johnson</p>
+                                                <p class="text-xs text-gray-500" data-bind="comment.createdAt">2 hours ago</p>
+                                            </div>
+                                            <p class="text-sm text-gray-700 mt-1" data-bind="comment.body">The financial projections in section 3 need to be updated with the latest market data. Please revise and resubmit.</p>
+                                            <div class="flex items-center space-x-4 mt-2">
+                                                <button class="text-xs text-gray-500 hover:text-gray-700" data-event="click:replyToComment">Reply</button>
+                                                <button class="text-xs text-gray-500 hover:text-gray-700" data-event="click:resolveComment">Mark as Resolved</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white border border-gray-200 rounded-lg p-4">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                                            <span class="text-xs font-medium text-gray-700">JS</span>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center space-x-2">
+                                                <p class="text-sm font-medium text-gray-900">Jane Smith</p>
+                                                <p class="text-xs text-gray-500">1 hour ago</p>
+                                            </div>
+                                            <p class="text-sm text-gray-700 mt-1">Thanks for the feedback, Mike. I'll update the projections and upload a new version shortly.</p>
+                                            <div class="flex items-center space-x-4 mt-2">
+                                                <button class="text-xs text-gray-500 hover:text-gray-700" data-event="click:replyToComment">Reply</button>
+                                                <span class="text-xs text-green-600 font-medium">✓ Resolved</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: DocumentDetailPanel -->
+    </div>
+    <!-- @END_COMPONENT: AppLayout -->
+
+    <!-- @COMPONENT: CreateDocumentModal (Hidden by default) -->
+    <div class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="createDocumentModal" data-implementation="Show/hide modal based on state">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Create New Document</h3>
+                <button class="text-gray-400 hover:text-gray-600" data-event="click:closeCreateModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form class="space-y-4" data-event="submit:createDocument" data-implementation="Handle form submission and validation">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Document Title</label>
+                    <input type="text" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter document title" required data-bind="form.title">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                    <select class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent" required data-bind="form.department">
+                        <option value="">Select department</option>
+                        <option value="finance">Finance</option>
+                        <option value="hr">Human Resources</option>
+                        <option value="legal">Legal</option>
+                        <option value="operations">Operations</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Upload Document</label>
+                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
+                        <div class="space-y-1 text-center">
+                            <i class="fas fa-cloud-upload-alt text-gray-400 text-2xl"></i>
+                            <div class="flex text-sm text-gray-600">
+                                <label class="relative cursor-pointer bg-white rounded-md font-medium text-primary hover:text-blue-500 focus-within:outline-none">
+                                    <span>Upload a file</span>
+                                    <input type="file" class="sr-only" accept=".pdf,.doc,.docx,.txt" data-event="change:handleFileUpload">
+                                </label>
+                                <p class="pl-1">or drag and drop</p>
+                            </div>
+                            <p class="text-xs text-gray-500">PDF, DOC, DOCX up to 10MB</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Assign Reviewers</label>
+                    <div class="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2" data-mock="true">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" data-bind="form.reviewers" value="mike-johnson">
+                            <span class="text-sm text-gray-700">Mike Johnson (HR Manager)</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" data-bind="form.reviewers" value="lisa-wilson">
+                            <span class="text-sm text-gray-700">Lisa Wilson (Finance Director)</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" data-bind="form.reviewers" value="anna-silva">
+                            <span class="text-sm text-gray-700">Anna Silva (Legal Counsel)</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex space-x-3 pt-4">
+                    <button type="button" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-md font-medium hover:bg-gray-400 transition-colors" data-event="click:closeCreateModal">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 bg-primary text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700 transition-colors">
+                        Create Document
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: CreateDocumentModal -->
+
+    <script>
+        // TODO: Implement business logic, API calls, and state management
+        (function() {
+            // Basic modal toggle functionality for demonstration
+            const createButton = document.querySelector('[data-event="click:createDocument"]');
+            const modal = document.getElementById('createDocumentModal');
+            const closeButtons = document.querySelectorAll('[data-event="click:closeCreateModal"]');
+
+            if (createButton && modal) {
+                createButton.addEventListener('click', () => {
+                    modal.classList.remove('hidden');
+                });
+            }
+
+            closeButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    modal.classList.add('hidden');
+                });
+            });
+
+            // Close modal on backdrop click
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.add('hidden');
+                    }
+                });
+            }
+
+            // Basic table interactions
+            const sortButtons = document.querySelectorAll('[data-event^="click:sortBy"]');
+            sortButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // TODO: Implement sorting logic
+                    console.log('Sort by:', button.textContent.trim());
+                });
+            });
+
+            // Tab switching in document detail panel
+            const tabButtons = document.querySelectorAll('[data-event^="click:switchTab"]');
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Remove active classes from all tabs
+                    tabButtons.forEach(tab => {
+                        tab.classList.remove('border-primary', 'text-primary');
+                        tab.classList.add('border-transparent', 'text-gray-500');
+                    });
+                    
+                    // Add active class to clicked tab
+                    button.classList.remove('border-transparent', 'text-gray-500');
+                    button.classList.add('border-primary', 'text-primary');
+                    
+                    // TODO: Show/hide corresponding tab content
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

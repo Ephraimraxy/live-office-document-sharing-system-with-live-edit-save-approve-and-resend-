@@ -1,0 +1,403 @@
+# 🔧 Document Workflow Web App — Architecture & Starter Kit
+
+*Stack: React (frontend) • Node.js/Express (backend) • Firebase Auth + Firestore (DB) • Firebase Cloud Messaging (FCM) • AWS S3 or Google Cloud Storage (file storage)*
+
+This blueprint gives you a production-ready plan with data models, APIs, workflow engine, role-based access, notifications, audit logs, versioning, and deploy steps. Copy sections directly into your project and iterate.
+
+---
+
+## 1) High-Level Architecture
+
+**Clients**: Web (React) + optional Mobile (React Native)
+
+**Backend**: Node.js/Express API
+
+**Auth & Identity**: Firebase Authentication (Email/Password, Phone, SSO if needed)
+
+**Database**: Firestore (Flexible, real-time listeners, strong SDK support)
+
+**Storage**:
+
+* Option A (Recommended for Firebase): **Google Cloud Storage (a.k.a. Firebase Storage)**
+* Option B: **AWS S3** (use official AWS SDK and signed URLs)
+
+**Notifications**: Firebase Cloud Messaging (Web + Mobile push), Email (SendGrid/SES), in-app alerts
+
+**Workflow Engine**: Firestore + Cloud Functions (or Express) implementing a finite state machine (FSM)
+
+**Observability**: Cloud Logging, Error Reporting, Metrics (OpenTelemetry optional)
+
+**CI/CD**: GitHub Actions → Deploy to Firebase Hosting (frontend), Cloud Run/Compute for Node API, Storage Buckets
+
+---
+
+## 2) Core Use Cases
+
+1. Upload document → create version (v1).
+2. Assign reviewers/approvers by role or to specific users/departments.
+3. Collaborate: comment, suggest edits, attach new versions.
+4. Sign (e-sign) → Approve/Reject with reasons.
+5. Route to next step or department automatically.
+6. Notify stakeholders in real time (push + email).
+7. Full audit trail of who did what & when.
+
+---
+
+## 3) Roles & Access Control (RBAC)
+
+**System-level roles** (examples):
+
+* `ADMIN` – manage users, policies, workflows, buckets
+* `OFFICER` – create/edit/submit documents
+* `REVIEWER` – comment/request changes
+* `APPROVER` – approve/reject/sign
+* `VIEWER` – read-only access
+
+**Scope**: Assign roles at org, department, or document level. Combine with **attribute-based rules** (e.g., department = Finance).
+
+**Policy evaluation**:
+
+* Check order: System role → Department membership → Document-level ACL.
+* Deny by default; allow explicitly.
+
+---
+
+## 4) Firestore Data Model (Collections)
+
+```
+/users/{uid}
+  displayName, email, roles: ["ADMIN", ...], departments: ["Finance"], fcmTokens: [...]
+
+/departments/{deptId}
+  name, members: [uid]
+
+/documents/{docId}
+  title, ownerUid, departmentId, status: "DRAFT|IN_REVIEW|PENDING_SIGNATURE|APPROVED|REJECTED|ARCHIVED",
+  currentVersionId, participants: { editors:[uid], reviewers:[uid], approvers:[uid], viewers:[uid] },
+  tags: [], createdAt, updatedAt, dueAt, acl: { read:[uid/role], write:[uid/role] }
+
+/documents/{docId}/versions/{versionId}
+  versionNumber, storagePath, sha256, createdBy, createdAt, changeSummary
+
+/documents/{docId}/comments/{commentId}
+  authorUid, body, createdAt, resolved:boolean
+
+/workflows/{workflowId}
+  docId, state: "DRAFT|REVIEW|SIGN|APPROVAL|DONE|REJECTED",
+  transitions: [ {from, to, byRole, guard?, action?} ],
+  assignees: { review:[uids], sign:[uids], approve:[uids] },
+  history: [ {at, byUid, action, meta} ]
+
+/tasks/{taskId}
+  type: "REVIEW|SIGN|APPROVE",
+  docId, workflowId, state: "OPEN|DONE|CANCELLED",
+  assignedTo: [uids|roles], createdAt, doneAt, notes
+
+/auditLogs/{logId}
+  actorUid, action, target: {type: "document|workflow|task|user", id}, timestamp, ip, userAgent, diff
+
+/notifications/{notifId}
+  toUid, type, payload, read:boolean, createdAt
+```
+
+**Tip**: Use Cloud Functions to maintain redundant fields (e.g., update `documents.updatedAt` when a new version is added).
+
+---
+
+## 5) Storage Layout
+
+### Google Cloud Storage (Firebase Storage)
+
+```
+files/
+  {docId}/
+    v1/{originalFileName}
+    v2/{originalFileName}
+    ...
+```
+
+Use **security rules** + **signed download URLs** if you must share outside. Store file hash (sha256) in version doc to detect tampering.
+
+### AWS S3 (if chosen)
+
+* Bucket policy: private by default.
+* Generate **pre-signed URLs** for upload/download.
+* Mirror the same folder structure as above.
+
+---
+
+## 6) Workflow Engine (Finite State Machine)
+
+**States**: `DRAFT → IN_REVIEW → PENDING_SIGNATURE → APPROVED → ARCHIVED` (or `REJECTED`)
+
+**Transitions (examples)**:
+
+* `submitForReview`: DRAFT→IN\_REVIEW (guard: editor or owner)
+* `requestChanges`: IN\_REVIEW→DRAFT (guard: reviewer)
+* `sendForSignature`: IN\_REVIEW→PENDING\_SIGNATURE (guard: reviewer or admin)
+* `sign`: PENDING\_SIGNATURE→APPROVED (guard: approver/signatory; requires signature)
+* `reject`: any→REJECTED (guard: approver; with reason)
+* `archive`: APPROVED→ARCHIVED (guard: admin)
+
+**Implementation options**:
+
+1. **Server-side**: Express endpoints validate guards & perform transition; write to `/workflows` & append to `history` + `auditLogs`.
+2. **Trigger-based**: Cloud Function listens for `workflows/{id}` updates and enforces state rules centrally.
+
+---
+
+## 7) Security Rules (Firestore & Storage)
+
+**Firestore (example skeleton)**
+
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function hasRole(role) { return isSignedIn() && role in request.auth.token.roles; }
+    function isDocParticipant(doc) {
+      return isSignedIn() && (
+        request.auth.uid == doc.ownerUid ||
+        request.auth.uid in doc.participants.editors ||
+        request.auth.uid in doc.participants.reviewers ||
+        request.auth.uid in doc.participants.approvers ||
+        request.auth.uid in doc.participants.viewers
+      );
+    }
+
+    match /documents/{docId} {
+      allow read: if isSignedIn() && isDocParticipant(resource.data);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.ownerUid ||
+        request.auth.uid in resource.data.participants.editors
+      );
+    }
+
+    match /documents/{docId}/versions/{versionId} {
+      allow read: if isSignedIn() && isDocParticipant(get(/databases/$(database)/documents/documents/$(docId)).data);
+      allow create: if isSignedIn() && (
+        request.auth.uid == get(/databases/$(database)/documents/documents/$(docId)).data.ownerUid ||
+        request.auth.uid in get(/databases/$(database)/documents/documents/$(docId)).data.participants.editors
+      );
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || hasRole('ADMIN'));
+      allow write: if hasRole('ADMIN');
+    }
+  }
+}
+```
+
+**Storage (GCS) example**
+
+```js
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() { return request.auth != null; }
+    function isDocParticipant(docId) {
+      return isSignedIn() && (
+        request.auth.uid == get(/databases/(default)/documents/documents/$(docId)).data.ownerUid ||
+        request.auth.uid in get(/databases/(default)/documents/documents/$(docId)).data.participants.editors ||
+        request.auth.uid in get(/databases/(default)/documents/documents/$(docId)).data.participants.reviewers ||
+        request.auth.uid in get(/databases/(default)/documents/documents/$(docId)).data.participants.approvers ||
+        request.auth.uid in get(/databases/(default)/documents/documents/$(docId)).data.participants.viewers
+      );
+    }
+
+    match /files/{docId}/{version}/{fileName} {
+      allow read, write: if isDocParticipant(docId);
+    }
+  }
+}
+```
+
+---
+
+## 8) REST API (Express) — Key Endpoints
+
+Base URL: `/api/v1`
+
+**Auth**
+
+* `POST /auth/impersonate` (admin only for testing)
+
+**Users**
+
+* `GET /users/me` — profile, roles
+* `POST /users/:uid/roles` — set roles (ADMIN only)
+
+**Documents**
+
+* `POST /documents` — create doc (title, department, participants)
+* `GET /documents/:id` — details + current version
+* `POST /documents/:id/versions` — request signed upload URL + create version
+* `POST /documents/:id/submit` — DRAFT→IN\_REVIEW
+* `POST /documents/:id/request-changes` — IN\_REVIEW→DRAFT
+* `POST /documents/:id/send-for-signature` — IN\_REVIEW→PENDING\_SIGNATURE
+* `POST /documents/:id/sign` — attach signature blob + transition
+* `POST /documents/:id/reject` — add reason + transition
+* `POST /documents/:id/archive`
+
+**Tasks & Workflow**
+
+* `GET /tasks?state=OPEN` — my tasks
+* `POST /workflows/:id/transition` — generic transition with `action` param
+
+**Audit**
+
+* `GET /documents/:id/audit` — paginated audit trail
+
+**Notifications**
+
+* `POST /notifications/test` — send a test FCM to self
+
+---
+
+## 9) Node.js/Express — Starter Snippets
+
+**package.json (server)**
+
+```json
+{
+  "name": "docflow-api",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4",
+    "cors": "^2",
+    "firebase-admin": "^12",
+    "jsonwebtoken": "^9",
+    "uuid": "^9",
+    "zod": "^3",
+    "@google-cloud/storage": "^7",
+    "aws-sdk": "^2"
+  },
+  "devDependencies": { "nodemon": "^3" }
+}
+```
+
+**src/index.js**
+
+```js
+import express from 'express';
+import cors from 'cors';
+import admin from 'firebase-admin';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
+import { Storage } from '@google-cloud/storage';
+import AWS from 'aws-sdk';
+import { z } from 'zod';
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+// --- Firebase Admin
+initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) });
+const db = getFirestore();
+const fcm = getMessaging();
+
+// --- Choose storage provider via env
+const USE_GCS = process.env.STORAGE_PROVIDER === 'gcs';
+let gcs, s3;
+if (USE_GCS) {
+  gcs = new Storage();
+} else {
+  AWS.config.update({ region: process.env.AWS_REGION, accessKeyId: process.env.AWS_KEY, secretAccessKey: process.env.AWS_SECRET });
+  s3 = new AWS.S3({ signatureVersion: 'v4' });
+}
+
+// --- Auth middleware (verify Firebase ID token)
+async function auth(req, res, next) {
+  try {
+    const idToken = (req.headers.authorization || '').replace('Bearer ', '');
+    if (!idToken) return res.status(401).json({ error: 'No token' });
+    req.user = await admin.auth().verifyIdToken(idToken);
+    next();
+  } catch (e) { res.status(401).json({ error: 'Invalid token' }); }
+}
+
+// --- Create document
+app.post('/api/v1/documents', auth, async (req, res) => {
+  const schema = z.object({ title: z.string().min(1), departmentId: z.string(), participants: z.object({ editors: z.array(z.string()).default([]), reviewers: z.array(z.string()).default([]), approvers: z.array(z.string()).default([]), viewers: z.array(z.string()).default([]) }) });
+  const payload = schema.parse(req.body);
+  const docRef = db.collection('documents').doc();
+  const doc = { ...payload, ownerUid: req.user.uid, status: 'DRAFT', createdAt: Date.now(), updatedAt: Date.now(), currentVersionId: null };
+  await docRef.set(doc);
+  res.json({ id: docRef.id, ...doc });
+});
+
+// --- Create new version: returns signed URL to upload to storage
+app.post('/api/v1/documents/:id/versions', auth, async (req, res) => {
+  const { id } = req.params;
+  const { fileName, contentType } = req.body;
+  const versionId = `v${Date.now()}`;
+  const objectPath = `files/${id}/${versionId}/${fileName}`;
+
+  if (USE_GCS) {
+    const bucket = gcs.bucket(process.env.GCS_BUCKET);
+    const file = bucket.file(objectPath);
+    const [url] = await file.getSignedUrl({ action: 'write', expires: Date.now() + 15 * 60 * 1000, contentType });
+    await db.collection('documents').doc(id).collection('versions').doc(versionId).set({ versionNumber: versionId, storagePath: objectPath, createdBy: req.user.uid, createdAt: Date.now() });
+    res.json({ uploadUrl: url, storagePath: objectPath, versionId });
+  } else {
+    const url = s3.getSignedUrl('putObject', { Bucket: process.env.S3_BUCKET, Key: objectPath, Expires: 900, ContentType: contentType });
+    await db.collection('documents').doc(id).collection('versions').doc(versionId).set({ versionNumber: versionId, storagePath: objectPath, createdBy: req.user.uid, createdAt: Date.now() });
+    res.json({ uploadUrl: url, storagePath: objectPath, versionId });
+  }
+});
+
+// --- Submit for review (transition)
+app.post('/api/v1/documents/:id/submit', auth, async (req, res) => {
+  const ref = db.collection('documents').doc(req.params.id);
+  const snap = await ref.get();
+  if (!snap.exists) return res.status(404).json({ error: 'Not found' });
+  const doc = snap.data();
+  if (doc.status !== 'DRAFT') return res.status(400).json({ error: 'Invalid state' });
+  // TODO: guard checks (is editor/owner)
+  await ref.update({ status: 'IN_REVIEW', updatedAt: Date.now() });
+  await db.collection('auditLogs').add({ actorUid: req.user.uid, action: 'SUBMIT_FOR_REVIEW', target: { type: 'document', id: ref.id }, timestamp: Date.now() });
+  res.json({ ok: true });
+});
+
+// --- Notify helper
+async function notifyUsers(uids, title, body, data = {}) {
+  const tokensSnaps = await Promise.all(uids.map(uid => db.collection('users').doc(uid).get()));
+  const tokens = tokensSnaps.flatMap(s => (s.data()?.fcmTokens || []));
+  if (tokens.length) {
+    await fcm.sendEachForMulticast({ tokens, notification: { title, body }, data });
+  }
+}
+
+app.listen(process.env.PORT || 8080, () => console.log('API running')); 
+```
+
+---
+
+## 10) Cloud Functions (optional) — Enforce Rules & Send Notifications
+
+**Example: when a document status becomes `IN_REVIEW`, notify reviewers**
+
+```js
+import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import admin from 'firebase-admin';
+admin.initializeApp();
+const db = admin.firestore();
+const fcm = admin.messaging();
+
+export const onDocStatusChange = onDocumentUpdated('documents/{docId}', async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  if (before.status !== 'IN_REVIEW' && after.status === 'IN_REVIEW') {
+    const reviewers = after.participants?.reviewers || [];
+    // push in-app notif doc
+    await Promise.all(reviewers.map(uid => db.collection('notifications').add({ toUid: uid, type: 'REVIEW_REQUEST', payload: { docId: event.params.docId }, read: false, createdAt: Date.now() })));
+```
